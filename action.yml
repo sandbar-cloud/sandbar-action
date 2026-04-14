@@ -1,0 +1,67 @@
+name: "Deploy to Sandbar"
+description: "Deploy static sites to Sandbar"
+branding:
+  icon: "upload-cloud"
+  color: "orange"
+
+inputs:
+  version:
+    description: "Sandbar CLI version (default: latest)"
+    required: false
+    default: "latest"
+  dir:
+    description: "Build output directory"
+    required: false
+  message:
+    description: "Deploy message"
+    required: false
+  working-directory:
+    description: "Working directory (where .sandbar/config.toml lives)"
+    required: false
+    default: "."
+
+outputs:
+  url:
+    description: "Deployed site URL"
+    value: ${{ steps.deploy.outputs.url }}
+  deploy-id:
+    description: "Deploy ID"
+    value: ${{ steps.deploy.outputs.deploy_id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Sandbar CLI
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        if [ "$VERSION" = "latest" ]; then
+          curl -sSL https://sandbar.cloud/install.sh | sh
+        else
+          SANDBAR_VERSION="$VERSION" curl -sSL https://sandbar.cloud/install.sh | sh
+        fi
+        sandbar version
+
+    - name: Deploy
+      id: deploy
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        sandbar login
+
+        ARGS=""
+        if [ -n "${{ inputs.dir }}" ]; then
+          ARGS="$ARGS --dir ${{ inputs.dir }}"
+        fi
+        if [ -n "${{ inputs.message }}" ]; then
+          ARGS="$ARGS --message \"${{ inputs.message }}\""
+        fi
+
+        OUTPUT=$(eval sandbar deploy $ARGS 2>&1)
+        echo "$OUTPUT"
+
+        URL=$(echo "$OUTPUT" | grep -E '^\s*(URL|Preview):' | awk '{print $2}')
+        DEPLOY_ID=$(echo "$OUTPUT" | grep -E '^\s*Deploy:' | awk '{print $2}')
+
+        echo "url=$URL" >> "$GITHUB_OUTPUT"
+        echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
