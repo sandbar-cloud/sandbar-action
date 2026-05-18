@@ -77,22 +77,28 @@ runs:
       id: deploy
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        DEPLOY_DIR: ${{ inputs.dir }}
+        DEPLOY_MESSAGE: ${{ inputs.message }}
       run: |
+        set -euo pipefail
+
         sandbar login
 
-        ARGS=""
-        if [ -n "${{ inputs.dir }}" ]; then
-          ARGS="$ARGS --dir ${{ inputs.dir }}"
-        fi
-        if [ -n "${{ inputs.message }}" ]; then
-          ARGS="$ARGS --message \"${{ inputs.message }}\""
+        ARGS=()
+        [ -n "${DEPLOY_DIR:-}" ] && ARGS+=(--dir "$DEPLOY_DIR")
+        [ -n "${DEPLOY_MESSAGE:-}" ] && ARGS+=(--message "$DEPLOY_MESSAGE")
+
+        # Stream output live to the log AND capture for URL/Deploy parsing.
+        # The prior version captured into $OUTPUT and only echoed on success —
+        # set -e killed the script on failure before any output reached the log.
+        OUT_FILE=$(mktemp)
+        if ! sandbar deploy "${ARGS[@]}" 2>&1 | tee "$OUT_FILE"; then
+          exit "${PIPESTATUS[0]}"
         fi
 
-        OUTPUT=$(eval sandbar deploy $ARGS 2>&1)
-        echo "$OUTPUT"
-
-        URL=$(echo "$OUTPUT" | grep -E '^\s*(URL|Preview):' | awk '{print $2}')
-        DEPLOY_ID=$(echo "$OUTPUT" | grep -E '^\s*Deploy:' | awk '{print $2}')
+        URL=$(grep -E '^\s*(URL|Preview):' "$OUT_FILE" | awk '{print $2}' | head -1)
+        DEPLOY_ID=$(grep -E '^\s*Deploy:' "$OUT_FILE" | awk '{print $2}' | head -1)
 
         echo "url=$URL" >> "$GITHUB_OUTPUT"
         echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
