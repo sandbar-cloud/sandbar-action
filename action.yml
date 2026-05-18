@@ -33,14 +33,45 @@ runs:
   steps:
     - name: Install Sandbar CLI
       shell: bash
+      env:
+        VERSION_INPUT: ${{ inputs.version }}
       run: |
-        VERSION="${{ inputs.version }}"
-        if [ "$VERSION" = "latest" ]; then
-          curl -sSL https://sandbar.cloud/install.sh | sh
+        set -euo pipefail
+
+        # Resolve the release tag. "latest" follows the GitHub
+        # releases/latest redirect; explicit input is normalised to vX.Y.Z.
+        if [ "$VERSION_INPUT" = "latest" ]; then
+          TAG=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+            https://github.com/sandbar-cloud/sandbar-cli/releases/latest \
+            | sed 's|.*/||')
         else
-          SANDBAR_VERSION="$VERSION" curl -sSL https://sandbar.cloud/install.sh | sh
+          TAG="v${VERSION_INPUT#v}"
         fi
-        sandbar version
+        VERSION="${TAG#v}"
+
+        # Map runner OS/arch to goreleaser's archive naming.
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+        esac
+
+        URL="https://github.com/sandbar-cloud/sandbar-cli/releases/download/${TAG}/sandbar_${VERSION}_${OS}_${ARCH}.tar.gz"
+        TMPDIR=$(mktemp -d)
+        echo "Installing sandbar $TAG ($OS/$ARCH) from $URL"
+        curl -fsSL "$URL" | tar xz -C "$TMPDIR"
+
+        # Stage under $HOME/.local/bin so we don't need sudo, then
+        # prepend to GITHUB_PATH so later steps find the binary.
+        mkdir -p "$HOME/.local/bin"
+        mv "$TMPDIR/sandbar" "$HOME/.local/bin/sandbar"
+        chmod +x "$HOME/.local/bin/sandbar"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        rm -rf "$TMPDIR"
+
+        "$HOME/.local/bin/sandbar" version
 
     - name: Deploy
       id: deploy
