@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Robot App token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Run semantic-release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v6
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      # GitHub Actions consumers reference moving tags like `@v1` and
+      # `@v1.2`. After semantic-release stamps the immutable vX.Y.Z
+      # tag, fast-forward the major and minor aliases to point at it
+      # so existing consumers keep getting patch updates without
+      # changing their workflow files.
+      - name: Update moving major + minor tags
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          TAG: ${{ steps.semantic.outputs.new_release_git_tag }}
+          MAJOR: v${{ steps.semantic.outputs.new_release_major_version }}
+          MINOR: v${{ steps.semantic.outputs.new_release_major_version }}.${{ steps.semantic.outputs.new_release_minor_version }}
+        run: |
+          set -euo pipefail
+          git config user.name "mataki-robot[bot]"
+          git config user.email "mataki-robot[bot]@users.noreply.github.com"
+          git tag -f "$MAJOR" "$TAG"
+          git tag -f "$MINOR" "$TAG"
+          git push origin "$MAJOR" "$MINOR" --force
+
+concurrency:
+  group: release
+  cancel-in-progress: true
