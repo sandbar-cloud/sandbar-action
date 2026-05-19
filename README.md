@@ -20,6 +20,7 @@ Your workflow needs `permissions: id-token: write` for OIDC authentication.
 |-------|----------|---------|-------------|
 | `dir` | No | — | Build output directory. Overrides the value in `.sandbar/config.toml`. |
 | `message` | No | — | Deploy message |
+| `env` | No | — | Named environment from `[env.<name>]` in `.sandbar/config.toml`. Exports `SANDBAR_ENV` so the CLI picks the right override set when running `[build] command` |
 | `version` | No | `latest` | Sandbar CLI version to install |
 | `working-directory` | No | `.` | Directory containing `.sandbar/config.toml` |
 
@@ -59,6 +60,36 @@ jobs:
       - uses: sandbar-cloud/sandbar-action@v1
         with:
           dir: dist
+```
+
+### Production Deploy (CLI runs the build)
+
+With `[build]` and `[env.production]` configured in `.sandbar/config.toml`,
+the action runs the build itself with the right env vars injected:
+
+```yaml
+name: Deploy to Sandbar
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+
+      - uses: sandbar-cloud/sandbar-action@v1
+        with:
+          env: production
 ```
 
 ### PR Preview
