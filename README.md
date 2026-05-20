@@ -129,7 +129,6 @@ jobs:
         with:
           dir: dist
           message: "PR #${{ github.event.pull_request.number }}"
-          github-token: ${{ github.token }}
 ```
 
 To disable the comment, set `comment: false`. To customise the body,
@@ -139,7 +138,6 @@ set `comment-body` — `{url}` is replaced with the deploy URL:
       - uses: sandbar-cloud/sandbar-action@v1
         with:
           dir: dist
-          github-token: ${{ github.token }}
           comment-body: |
             ### Preview ready
 
