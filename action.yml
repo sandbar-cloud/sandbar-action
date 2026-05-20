@@ -18,10 +18,30 @@ inputs:
   env:
     description: "Named environment from [env.<name>] in sandbar config (sets SANDBAR_ENV)"
     required: false
+  branch:
+    description: "Branch identifier for branch deploys (sandbar deploy --branch). Empty (default) means a production deploy. On pull_request events the default is auto-derived as 'pr-<number>' so previews do not overwrite production; set to '-' to force a production deploy from a PR."
+    required: false
+    default: ""
   working-directory:
     description: "Working directory (where .sandbar/config.toml lives)"
     required: false
     default: "."
+  comment:
+    description: "Post a sticky PR comment with the preview URL. 'auto' (default) posts on pull_request events; 'true' forces; 'false' disables."
+    required: false
+    default: "auto"
+  comment-marker:
+    description: "Hidden marker used to find and update the sticky comment on subsequent runs. Change if you deploy more than once per PR."
+    required: false
+    default: "<!-- sandbar-preview -->"
+  comment-body:
+    description: "Markdown body template for the PR comment. '{url}' is replaced with the deploy URL. The marker is appended automatically."
+    required: false
+    default: "**Sandbar preview** deployed: {url}"
+  github-token:
+    description: "Token used to post the PR comment. Defaults to the calling workflow's github.token. The calling job still needs pull-requests: write."
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   url:
@@ -84,14 +104,32 @@ runs:
         DEPLOY_DIR: ${{ inputs.dir }}
         DEPLOY_MESSAGE: ${{ inputs.message }}
         SANDBAR_ENV: ${{ inputs.env }}
+        DEPLOY_BRANCH: ${{ inputs.branch }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         set -euo pipefail
 
         sandbar login
 
+        # Resolve --branch. On pull_request events without an explicit
+        # input, default to 'pr-<number>' so previews land on their own
+        # URL instead of overwriting production. '-' is the explicit
+        # opt-out for callers who want a production deploy from a PR.
+        RESOLVED_BRANCH="${DEPLOY_BRANCH:-}"
+        if [ -z "$RESOLVED_BRANCH" ] && \
+           { [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; } && \
+           [ -n "${PR_NUMBER:-}" ]; then
+          RESOLVED_BRANCH="pr-$PR_NUMBER"
+        fi
+        if [ "$RESOLVED_BRANCH" = "-" ]; then
+          RESOLVED_BRANCH=""
+        fi
+
         ARGS=()
         [ -n "${DEPLOY_DIR:-}" ] && ARGS+=(--dir "$DEPLOY_DIR")
         [ -n "${DEPLOY_MESSAGE:-}" ] && ARGS+=(--message "$DEPLOY_MESSAGE")
+        [ -n "${RESOLVED_BRANCH:-}" ] && ARGS+=(--branch "$RESOLVED_BRANCH")
         # SANDBAR_ENV is already exported above; sandbar-cli picks it up
         # as the --env flag fallback. No need to add to ARGS.
 
@@ -108,3 +146,70 @@ runs:
 
         echo "url=$URL" >> "$GITHUB_OUTPUT"
         echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+    - name: Comment on PR
+      shell: bash
+      env:
+        COMMENT_MODE: ${{ inputs.comment }}
+        COMMENT_MARKER: ${{ inputs.comment-marker }}
+        COMMENT_BODY: ${{ inputs.comment-body }}
+        DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+
+        # Decide whether to post.
+        case "${COMMENT_MODE:-auto}" in
+          ""|false|no|off)
+            echo "PR comment disabled (comment=${COMMENT_MODE:-auto})."
+            exit 0
+            ;;
+          auto)
+            if [ "$EVENT_NAME" != "pull_request" ] && [ "$EVENT_NAME" != "pull_request_target" ]; then
+              echo "Event '$EVENT_NAME' is not a pull_request; skipping comment."
+              exit 0
+            fi
+            ;;
+          true|yes|on) ;;
+          *)
+            echo "Unknown comment mode '$COMMENT_MODE'; expected auto, true, or false." >&2
+            exit 1
+            ;;
+        esac
+
+        if [ -z "${DEPLOY_URL:-}" ]; then
+          echo "No deploy URL captured; nothing to comment." >&2
+          exit 0
+        fi
+        if [ -z "${PR_NUMBER:-}" ]; then
+          echo "No PR number in event payload; skipping comment."
+          exit 0
+        fi
+        if [ -z "${GH_TOKEN:-}" ]; then
+          echo "github-token input resolved to empty; cannot post comment." >&2
+          echo "The default is github.token from the calling workflow — check that the job is not stripping it." >&2
+          exit 1
+        fi
+
+        # Render body, then append the hidden marker as the last line so
+        # the next run can find this comment and update it in place.
+        BODY="${COMMENT_BODY//\{url\}/$DEPLOY_URL}"
+        BODY="${BODY}
+
+        ${COMMENT_MARKER}"
+
+        EXISTING_ID=$(gh api --paginate \
+          "repos/$REPO/issues/$PR_NUMBER/comments" \
+          --jq ".[] | select(.body | contains(\"$COMMENT_MARKER\")) | .id" \
+          | head -n1 || true)
+
+        if [ -n "${EXISTING_ID:-}" ]; then
+          echo "Updating existing comment #$EXISTING_ID on PR #$PR_NUMBER."
+          gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING_ID" -f body="$BODY" > /dev/null
+        else
+          echo "Creating new comment on PR #$PR_NUMBER."
+          gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$BODY" > /dev/null
+        fi

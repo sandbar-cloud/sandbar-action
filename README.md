@@ -21,8 +21,13 @@ Your workflow needs `permissions: id-token: write` for OIDC authentication.
 | `dir` | No | — | Build output directory. Overrides the value in `.sandbar/config.toml`. |
 | `message` | No | — | Deploy message |
 | `env` | No | — | Named environment from `[env.<name>]` in `.sandbar/config.toml`. Exports `SANDBAR_ENV` so the CLI picks the right override set when running `[build] command` |
+| `branch` | No | auto | Branch identifier for `sandbar deploy --branch`. On `pull_request` events the default is `pr-<number>` so previews don't overwrite production; on push events it stays empty (production). Set to `-` to force a production deploy from a PR. |
 | `version` | No | `latest` | Sandbar CLI version to install |
 | `working-directory` | No | `.` | Directory containing `.sandbar/config.toml` |
+| `comment` | No | `auto` | Post a sticky PR comment with the preview URL. `auto` posts on `pull_request` events; `true` forces; `false` disables. |
+| `comment-marker` | No | `<!-- sandbar-preview -->` | Hidden marker used to find and update the same comment on subsequent runs. Change if you deploy more than once per PR (e.g., staging + preview). |
+| `comment-body` | No | `**Sandbar preview** deployed: {url}` | Markdown template. `{url}` is replaced with the deploy URL; the marker is appended automatically. |
+| `github-token` | No | `${{ github.token }}` | Token used to post the PR comment. Defaults to the caller's `github.token` — usually no need to set it. The job still needs `pull-requests: write`. |
 
 ## Outputs
 
@@ -94,6 +99,10 @@ jobs:
 
 ### PR Preview
 
+The action posts a sticky comment with the preview URL automatically on
+pull-request events. Subsequent pushes update the same comment instead
+of creating new ones.
+
 ```yaml
 name: Preview
 on:
@@ -106,6 +115,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -117,20 +127,23 @@ jobs:
       - run: npm ci && npm run build
 
       - uses: sandbar-cloud/sandbar-action@v1
-        id: preview
         with:
           dir: dist
           message: "PR #${{ github.event.pull_request.number }}"
+```
 
-      - uses: actions/github-script@v7
+To disable the comment, set `comment: false`. To customise the body,
+set `comment-body` — `{url}` is replaced with the deploy URL:
+
+```yaml
+      - uses: sandbar-cloud/sandbar-action@v1
         with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `Preview deployed: ${{ steps.preview.outputs.url }}`
-            })
+          dir: dist
+          comment-body: |
+            ### Preview ready
+
+            - URL: {url}
+            - Commit: `${{ github.sha }}`
 ```
 
 ## Versioning
