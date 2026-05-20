@@ -18,6 +18,10 @@ inputs:
   env:
     description: "Named environment from [env.<name>] in sandbar config (sets SANDBAR_ENV)"
     required: false
+  branch:
+    description: "Branch identifier for branch deploys (sandbar deploy --branch). Empty (default) means a production deploy. On pull_request events the default is auto-derived as 'pr-<number>' so previews do not overwrite production; set to '-' to force a production deploy from a PR."
+    required: false
+    default: ""
   working-directory:
     description: "Working directory (where .sandbar/config.toml lives)"
     required: false
@@ -100,14 +104,32 @@ runs:
         DEPLOY_DIR: ${{ inputs.dir }}
         DEPLOY_MESSAGE: ${{ inputs.message }}
         SANDBAR_ENV: ${{ inputs.env }}
+        DEPLOY_BRANCH: ${{ inputs.branch }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         set -euo pipefail
 
         sandbar login
 
+        # Resolve --branch. On pull_request events without an explicit
+        # input, default to 'pr-<number>' so previews land on their own
+        # URL instead of overwriting production. '-' is the explicit
+        # opt-out for callers who want a production deploy from a PR.
+        RESOLVED_BRANCH="${DEPLOY_BRANCH:-}"
+        if [ -z "$RESOLVED_BRANCH" ] && \
+           { [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; } && \
+           [ -n "${PR_NUMBER:-}" ]; then
+          RESOLVED_BRANCH="pr-$PR_NUMBER"
+        fi
+        if [ "$RESOLVED_BRANCH" = "-" ]; then
+          RESOLVED_BRANCH=""
+        fi
+
         ARGS=()
         [ -n "${DEPLOY_DIR:-}" ] && ARGS+=(--dir "$DEPLOY_DIR")
         [ -n "${DEPLOY_MESSAGE:-}" ] && ARGS+=(--message "$DEPLOY_MESSAGE")
+        [ -n "${RESOLVED_BRANCH:-}" ] && ARGS+=(--branch "$RESOLVED_BRANCH")
         # SANDBAR_ENV is already exported above; sandbar-cli picks it up
         # as the --env flag fallback. No need to add to ARGS.
 

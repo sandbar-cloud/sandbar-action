@@ -21,6 +21,7 @@ Your workflow needs `permissions: id-token: write` for OIDC authentication.
 | `dir` | No | — | Build output directory. Overrides the value in `.sandbar/config.toml`. |
 | `message` | No | — | Deploy message |
 | `env` | No | — | Named environment from `[env.<name>]` in `.sandbar/config.toml`. Exports `SANDBAR_ENV` so the CLI picks the right override set when running `[build] command` |
+| `branch` | No | auto | Branch identifier for `sandbar deploy --branch`. On `pull_request` events the default is `pr-<number>` so previews don't overwrite production; on push events it stays empty (production). Set to `-` to force a production deploy from a PR. |
 | `version` | No | `latest` | Sandbar CLI version to install |
 | `working-directory` | No | `.` | Directory containing `.sandbar/config.toml` |
 | `comment` | No | `auto` | Post a sticky PR comment with the preview URL. `auto` posts on `pull_request` events; `true` forces; `false` disables. |
