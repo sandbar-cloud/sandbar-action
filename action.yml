@@ -107,10 +107,22 @@ runs:
         DEPLOY_BRANCH: ${{ inputs.branch }}
         EVENT_NAME: ${{ github.event_name }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
         set -euo pipefail
 
         sandbar login
+
+        # Resolve --message. On pull_request events without an explicit
+        # input, default to "PR #<N>: <title>" instead of letting the
+        # CLI's message_from_git pick up the auto-generated merge ref
+        # subject ("Merge <sha> into <sha>"). Push events keep the
+        # message_from_git behavior — actual commit subjects are useful.
+        if [ -z "${DEPLOY_MESSAGE:-}" ] && \
+           { [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; } && \
+           [ -n "${PR_NUMBER:-}" ]; then
+          DEPLOY_MESSAGE="PR #${PR_NUMBER}: ${PR_TITLE:-untitled}"
+        fi
 
         # Resolve --branch. On pull_request events without an explicit
         # input, default to 'pr-<number>' so previews land on their own
