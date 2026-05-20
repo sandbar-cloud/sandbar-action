@@ -141,7 +141,11 @@ runs:
           exit "${PIPESTATUS[0]}"
         fi
 
-        URL=$(grep -E '^\s*(URL|Preview):' "$OUT_FILE" | awk '{print $2}' | head -1)
+        # Pick the most user-facing URL. The CLI prints 'URL:' (live) on
+        # every deploy and adds a separate 'Preview:' line when --branch
+        # is set. Taking the last match means production deploys still
+        # report the live URL while branch deploys surface the preview URL.
+        URL=$(grep -E '^\s*(URL|Preview):' "$OUT_FILE" | awk '{print $2}' | tail -1)
         DEPLOY_ID=$(grep -E '^\s*Deploy:' "$OUT_FILE" | awk '{print $2}' | head -1)
 
         echo "url=$URL" >> "$GITHUB_OUTPUT"
