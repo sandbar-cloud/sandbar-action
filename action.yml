@@ -35,9 +35,9 @@ inputs:
     required: false
     default: "**Sandbar preview** deployed: {url}"
   github-token:
-    description: "Token used to post the PR comment. Required when the comment step runs. Pass the calling workflow's github.token and grant pull-requests: write."
+    description: "Token used to post the PR comment. Defaults to the calling workflow's github.token. The calling job still needs pull-requests: write."
     required: false
-    default: ""
+    default: ${{ github.token }}
 
 outputs:
   url:
@@ -167,8 +167,8 @@ runs:
           exit 0
         fi
         if [ -z "${GH_TOKEN:-}" ]; then
-          echo "PR comment requested but github-token input is empty." >&2
-          echo "Pass github.token from the calling workflow and grant pull-requests: write." >&2
+          echo "github-token input resolved to empty; cannot post comment." >&2
+          echo "The default is github.token from the calling workflow — check that the job is not stripping it." >&2
           exit 1
         fi
 

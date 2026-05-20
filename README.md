@@ -26,7 +26,7 @@ Your workflow needs `permissions: id-token: write` for OIDC authentication.
 | `comment` | No | `auto` | Post a sticky PR comment with the preview URL. `auto` posts on `pull_request` events; `true` forces; `false` disables. |
 | `comment-marker` | No | `<!-- sandbar-preview -->` | Hidden marker used to find and update the same comment on subsequent runs. Change if you deploy more than once per PR (e.g., staging + preview). |
 | `comment-body` | No | `**Sandbar preview** deployed: {url}` | Markdown template. `{url}` is replaced with the deploy URL; the marker is appended automatically. |
-| `github-token` | No | — | Token used to post the PR comment. Required when the comment step runs. Pass `${{ github.token }}` and grant `pull-requests: write`. |
+| `github-token` | No | `${{ github.token }}` | Token used to post the PR comment. Defaults to the caller's `github.token` — usually no need to set it. The job still needs `pull-requests: write`. |
 
 ## Outputs
 
