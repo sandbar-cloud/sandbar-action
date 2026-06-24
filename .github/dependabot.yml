@@ -18,4 +18,3 @@ updates:
         update-types:
           - "minor"
           - "patch"
-

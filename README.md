@@ -2,7 +2,8 @@
 
 GitHub Action for deploying static sites to [Sandbar](https://sandbar.cloud).
 
-Authenticates via GitHub OIDC — no API keys needed. Configure your site to trust your repository under **Settings > OIDC Trust** in the Sandbar console.
+Authenticates via GitHub OIDC — no API keys needed. Configure your site to
+trust your repository under **Settings > OIDC Trust** in the Sandbar console.
 
 ## Quick Start
 
@@ -10,9 +11,13 @@ Authenticates via GitHub OIDC — no API keys needed. Configure your site to tru
 - uses: sandbar-cloud/sandbar-action@v1
   with:
     dir: dist
+    microwave-github-actions-exchange-id: ${{ vars.SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID }}
 ```
 
-Your workflow needs `permissions: id-token: write` for OIDC authentication.
+Your workflow needs `permissions: id-token: write` for OIDC authentication. The
+exchange ID is the Sandbar GitHub Actions Trust Exchange created in Microwave;
+pass it as the action input or expose it as
+`SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID` in the workflow environment.
 
 ## Inputs
 
@@ -28,6 +33,9 @@ Your workflow needs `permissions: id-token: write` for OIDC authentication.
 | `comment-marker` | No | `<!-- sandbar-preview -->` | Hidden marker used to find and update the same comment on subsequent runs. Change if you deploy more than once per PR (e.g., staging + preview). |
 | `comment-body` | No | `**Sandbar preview** deployed: {url}` | Markdown template. `{url}` is replaced with the deploy URL; the marker is appended automatically. |
 | `github-token` | No | `${{ github.token }}` | Token used to post the PR comment. Defaults to the caller's `github.token` — usually no need to set it. The job still needs `pull-requests: write`. |
+| `microwave-github-actions-exchange-id` | No | — | Microwave Trust Exchange ID used to redeem the GitHub Actions OIDC token. If omitted, set `SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID` in the workflow environment. |
+| `microwave-auth-url` | No | CLI default | Microwave auth endpoint override. |
+| `microwave-api-url` | No | CLI default | Microwave API endpoint override. |
 
 ## Outputs
 
@@ -65,6 +73,7 @@ jobs:
       - uses: sandbar-cloud/sandbar-action@v1
         with:
           dir: dist
+          microwave-github-actions-exchange-id: ${{ vars.SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID }}
 ```
 
 ### Production Deploy (CLI runs the build)
@@ -95,6 +104,7 @@ jobs:
       - uses: sandbar-cloud/sandbar-action@v1
         with:
           env: production
+          microwave-github-actions-exchange-id: ${{ vars.SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID }}
 ```
 
 ### PR Preview
@@ -130,6 +140,7 @@ jobs:
         with:
           dir: dist
           message: "PR #${{ github.event.pull_request.number }}"
+          microwave-github-actions-exchange-id: ${{ vars.SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID }}
 ```
 
 To disable the comment, set `comment: false`. To customise the body,
@@ -139,6 +150,7 @@ set `comment-body` — `{url}` is replaced with the deploy URL:
       - uses: sandbar-cloud/sandbar-action@v1
         with:
           dir: dist
+          microwave-github-actions-exchange-id: ${{ vars.SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID }}
           comment-body: |
             ### Preview ready
 

@@ -42,6 +42,15 @@ inputs:
     description: "Token used to post the PR comment. Defaults to the calling workflow's github.token. The calling job still needs pull-requests: write."
     required: false
     default: ${{ github.token }}
+  microwave-github-actions-exchange-id:
+    description: "Microwave Trust Exchange ID used to redeem the GitHub Actions OIDC token. If omitted, the CLI reads SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID from the workflow environment."
+    required: false
+  microwave-auth-url:
+    description: "Microwave auth endpoint. If omitted, the CLI default is used."
+    required: false
+  microwave-api-url:
+    description: "Microwave API endpoint. If omitted, the CLI default is used."
+    required: false
 
 outputs:
   url:
@@ -105,11 +114,24 @@ runs:
         DEPLOY_MESSAGE: ${{ inputs.message }}
         SANDBAR_ENV: ${{ inputs.env }}
         DEPLOY_BRANCH: ${{ inputs.branch }}
+        MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID_INPUT: ${{ inputs.microwave-github-actions-exchange-id }}
+        MICROWAVE_AUTH_URL_INPUT: ${{ inputs.microwave-auth-url }}
+        MICROWAVE_API_URL_INPUT: ${{ inputs.microwave-api-url }}
         EVENT_NAME: ${{ github.event_name }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
         set -euo pipefail
+
+        if [ -n "${MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID_INPUT:-}" ]; then
+          export SANDBAR_MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID="$MICROWAVE_GITHUB_ACTIONS_EXCHANGE_ID_INPUT"
+        fi
+        if [ -n "${MICROWAVE_AUTH_URL_INPUT:-}" ]; then
+          export SANDBAR_MICROWAVE_AUTH_URL="$MICROWAVE_AUTH_URL_INPUT"
+        fi
+        if [ -n "${MICROWAVE_API_URL_INPUT:-}" ]; then
+          export SANDBAR_MICROWAVE_API_URL="$MICROWAVE_API_URL_INPUT"
+        fi
 
         sandbar login
 
